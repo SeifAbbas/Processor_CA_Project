@@ -81,7 +81,7 @@ void parse_instructions(FILE *assembly_file)
             opcode = 3 << 28; // opcode for MOVI is 3
             rs = atoi(tokens[1] + 1) << 23;
             immediate = atoi(tokens[2]);
-            memory[instruction_count++] = opcode | rs | immediate;
+            memory[instruction_count++] = opcode | rs | ((immediate & 0x3FFFF));
         }
         else if (strcmp(tokens[0], "JEQ") == 0)
         {
@@ -108,7 +108,7 @@ void parse_instructions(FILE *assembly_file)
             rs = atoi(tokens[1] + 1) << 23;
             rt = atoi(tokens[2] + 1) << 18;
             immediate = atoi(tokens[3]);
-            memory[instruction_count++] = opcode | rs | rt | immediate;
+            memory[instruction_count++] = opcode | rs | rt | ((immediate & 0x3FFFF));
         }
         else if (strcmp(tokens[0], "JMP") == 0)
         {
@@ -142,7 +142,7 @@ void parse_instructions(FILE *assembly_file)
             rs = atoi(tokens[1] + 1) << 23;
             rt = atoi(tokens[2] + 1) << 18;
             immediate = atoi(tokens[3]);
-            memory[instruction_count++] = opcode | rs | rt | immediate;
+            memory[instruction_count++] = opcode | rs | rt | ((immediate & 0x3FFFF));
         }
         else if (strcmp(tokens[0], "MOVM") == 0)
         {
@@ -151,7 +151,7 @@ void parse_instructions(FILE *assembly_file)
             rs = atoi(tokens[1] + 1) << 23;
             rt = atoi(tokens[2] + 1) << 18;
             immediate = atoi(tokens[3]);
-            memory[instruction_count++] = opcode | rs | rt | immediate;
+            memory[instruction_count++] = opcode | rs | rt | ((immediate & 0x3FFFF));
         }
         else
         {
