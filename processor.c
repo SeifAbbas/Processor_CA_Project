@@ -3,15 +3,17 @@
 #include <string.h>
 
 // Constants
-#define MEMORY_SIZE 2048 // Words (each word is 4 bytes)
-#define NUM_REGISTERS 33
+#define MEMORY_SIZE 2048    // Words (each word is 4 bytes)
+#define NUM_REGISTERS 32    // Number of registers
 #define INSTRUCTION_SIZE 32 // Size of each instruction in bits
 #define MAX_TOKENS 100      // Define a maximum number of tokens
 
 // Memory and registers
 int memory[MEMORY_SIZE];
 int registers[NUM_REGISTERS];
+int ALU_result = 0;
 int instruction_count = 0;
+int instruction = 0;
 int pc = 0;
 
 // Function prototypes
@@ -22,9 +24,9 @@ void decode(int instruction);
 
 // Instruction fields
 int opcode = 0;    // (bits 31:28) ~~ Opcode value (0-11)
-int rs = 0;        // (bits 27:23) ~~ Source register 1 (for R-type and I-type instructions)
-int rt = 0;        // (bits 22:18) ~~ Source register 2 (for R-type and I-type instructions)
-int rd = 0;        // (bits 17:13) ~~ Destination register (for R-type instructions)
+int R1 = 0;        // (bits 27:23) ~~ Source register 1 (for R-type and I-type instructions)
+int R2 = 0;        // (bits 22:18) ~~ Source register 2 (for R-type and I-type instructions)
+int R3 = 0;        // (bits 17:13) ~~ Destination register (for R-type instructions)
 int shamt = 0;     // (bits 12:0)  ~~ Shift amount (for R-type instructions)
 int immediate = 0; // (bits 17:0)  ~~ Immediate value (for I-type instructions)
 int address = 0;   // (bits 27:0)  ~~ Address (for J-type instructions)
@@ -38,77 +40,78 @@ void parse_instructions(FILE *assembly_file)
     {
 
         // Tokenize the line (separate opcode, operands)
-        char *tokens[4]; // Assuming maximum of 4 tokens (opcode, rd, rs, rt/immediate)
+        char *tokens[4]; // Assuming maximum of 4 tokens (opcode, R3, R1, R2/immediate)
         int num_tokens = tokenize(line, tokens, " ");
 
         if (num_tokens < 2)
         {
             // Handle error: Line with less than 2 tokens (opcode and operand)
-            continue;
+            printf("Error: Invalid instruction format\n");
+            break;
         }
 
         // Parse instruction based on opcode
         if (strcmp(tokens[0], "ADD") == 0)
         {
-            // ADD instruction format: ADD rs,rt,rd
+            // ADD instruction format: ADD R1,R2,R3
             // opcode for ADD is 0
-            rs = atoi(tokens[1] + 1) << 23;
-            rt = atoi(tokens[2] + 1) << 18;
-            rd = atoi(tokens[3] + 1) << 13;
-            memory[instruction_count++] = opcode | rs | rt | rd;
+            R1 = atoi(tokens[1] + 1) << 23;
+            R2 = atoi(tokens[2] + 1) << 18;
+            R3 = atoi(tokens[3] + 1) << 13;
+            memory[instruction_count++] = opcode | R1 | R2 | R3;
         }
         else if (strcmp(tokens[0], "SUB") == 0)
         {
-            // SUB instruction format: SUB rs,rt,rd
+            // SUB instruction format: SUB R1,R2,R3
             opcode = 1 << 28; // opcode for SUB is 1
-            rs = atoi(tokens[1] + 1) << 23;
-            rt = atoi(tokens[2] + 1) << 18;
-            rd = atoi(tokens[3] + 1) << 13;
-            memory[instruction_count++] = opcode | rs | rt | rd;
+            R1 = atoi(tokens[1] + 1) << 23;
+            R2 = atoi(tokens[2] + 1) << 18;
+            R3 = atoi(tokens[3] + 1) << 13;
+            memory[instruction_count++] = opcode | R1 | R2 | R3;
         }
         else if (strcmp(tokens[0], "MUL") == 0)
         {
-            // MUL instruction format: MUL rd, rs, rt
+            // MUL instruction format: MUL R3, R1, R2
             opcode = 2 << 28; // opcode for MUL is 2
-            rs = atoi(tokens[1] + 1) << 23;
-            rt = atoi(tokens[2] + 1) << 18;
-            rd = atoi(tokens[3] + 1) << 13;
-            memory[instruction_count++] = opcode | rs | rt | rd;
+            R1 = atoi(tokens[1] + 1) << 23;
+            R2 = atoi(tokens[2] + 1) << 18;
+            R3 = atoi(tokens[3] + 1) << 13;
+            memory[instruction_count++] = opcode | R1 | R2 | R3;
         }
         else if (strcmp(tokens[0], "MOVI") == 0)
         {
-            // MOVI instruction format: MOVI rd, immediate
+            // MOVI instruction format: MOVI R3, immediate
             opcode = 3 << 28; // opcode for MOVI is 3
-            rs = atoi(tokens[1] + 1) << 23;
+            R1 = atoi(tokens[1] + 1) << 23;
             immediate = atoi(tokens[2]);
-            memory[instruction_count++] = opcode | rs | ((immediate & 0x3FFFF));
+            memory[instruction_count++] = opcode | R1 | ((immediate & 0x3FFFF));
         }
         else if (strcmp(tokens[0], "JEQ") == 0)
         {
-            // JEQ instruction format: JEQ rs, rt, address
+            // JEQ instruction format: JEQ R1, R2, address
             opcode = 4 << 28; // opcode for JEQ is 4
-            rs = atoi(tokens[1] + 1) << 23;
-            rt = atoi(tokens[2] + 1) << 18;
+            R1 = atoi(tokens[1] + 1) << 23;
+            R2 = atoi(tokens[2] + 1) << 18;
             immediate = atoi(tokens[3]);
-            memory[instruction_count++] = opcode | rs | rt | immediate;
+            memory[instruction_count++] = opcode | R1 | R2 | immediate;
         }
         else if (strcmp(tokens[0], "AND") == 0)
         {
-            // AND instruction format: AND rd, rs, rt
+            // AND instruction format: AND R3, R1, R2
             opcode = 5 << 28; // opcode for AND is 5
-            rs = atoi(tokens[1] + 1) << 23;
-            rt = atoi(tokens[2] + 1) << 18;
-            rd = atoi(tokens[3] + 1) << 13;
-            memory[instruction_count++] = opcode | rs | rt | rd;
+            R1 = atoi(tokens[1] + 1) << 23;
+            R2 = atoi(tokens[2] + 1) << 18;
+            R3 = atoi(tokens[3] + 1) << 13;
+            memory[instruction_count++] = opcode | R1 | R2 | R3;
         }
         else if (strcmp(tokens[0], "XORI") == 0)
         {
-            // XORI instruction format: XORI rs, rt, immediate
+            // XORI instruction format: XORI R1, R2, immediate
             opcode = 6 << 28; // opcode for XORI is 6
-            rs = atoi(tokens[1] + 1) << 23;
-            rt = atoi(tokens[2] + 1) << 18;
+            R1 = atoi(tokens[1] + 1) << 23;
+            R2 = atoi(tokens[2] + 1) << 18;
             immediate = atoi(tokens[3]);
-            memory[instruction_count++] = opcode | rs | rt | ((immediate & 0x3FFFF));
+            memory[instruction_count++] = opcode | R1 | R2 | ((immediate & 0x3FFFF));
         }
         else if (strcmp(tokens[0], "JMP") == 0)
         {
@@ -119,39 +122,39 @@ void parse_instructions(FILE *assembly_file)
         }
         else if (strcmp(tokens[0], "LSL") == 0)
         {
-            // LSL instruction format: LSL rs, rt, shamt
+            // LSL instruction format: LSL R1, R2, shamt
             opcode = 8 << 28; // opcode for LSL is 8
-            rs = atoi(tokens[1] + 1) << 23;
-            rt = atoi(tokens[2] + 1) << 18;
+            R1 = atoi(tokens[1] + 1) << 23;
+            R2 = atoi(tokens[2] + 1) << 18;
             shamt = atoi(tokens[3]);
-            memory[instruction_count++] = opcode | rs | rt | shamt;
+            memory[instruction_count++] = opcode | R1 | R2 | shamt;
         }
         else if (strcmp(tokens[0], "LSR") == 0)
         {
-            // LSR instruction format: LSR rs, rt, shamt
+            // LSR instruction format: LSR R1, R2, shamt
             opcode = 9 << 28; // opcode for LSR is 9
-            rs = atoi(tokens[1] + 1) << 23;
-            rt = atoi(tokens[2] + 1) << 18;
+            R1 = atoi(tokens[1] + 1) << 23;
+            R2 = atoi(tokens[2] + 1) << 18;
             shamt = atoi(tokens[3]);
-            memory[instruction_count++] = opcode | rs | rt | shamt;
+            memory[instruction_count++] = opcode | R1 | R2 | shamt;
         }
         else if (strcmp(tokens[0], "MOVR") == 0)
         {
-            // MOVR instruction format: MOVR rs, rt, immediate
+            // MOVR instruction format: MOVR R1, R2, immediate
             opcode = 10 << 28; // opcode for MOVR is 10
-            rs = atoi(tokens[1] + 1) << 23;
-            rt = atoi(tokens[2] + 1) << 18;
+            R1 = atoi(tokens[1] + 1) << 23;
+            R2 = atoi(tokens[2] + 1) << 18;
             immediate = atoi(tokens[3]);
-            memory[instruction_count++] = opcode | rs | rt | ((immediate & 0x3FFFF));
+            memory[instruction_count++] = opcode | R1 | R2 | ((immediate & 0x3FFFF));
         }
         else if (strcmp(tokens[0], "MOVM") == 0)
         {
-            // MOVM instruction format: MOVM rs, rt, immediate
+            // MOVM instruction format: MOVM R1, R2, immediate
             opcode = 11 << 28; // opcode for MOVM is 11
-            rs = atoi(tokens[1] + 1) << 23;
-            rt = atoi(tokens[2] + 1) << 18;
+            R1 = atoi(tokens[1] + 1) << 23;
+            R2 = atoi(tokens[2] + 1) << 18;
             immediate = atoi(tokens[3]);
-            memory[instruction_count++] = opcode | rs | rt | ((immediate & 0x3FFFF));
+            memory[instruction_count++] = opcode | R1 | R2 | ((immediate & 0x3FFFF));
         }
         else
         {
@@ -187,21 +190,16 @@ int tokenize(char *line, char *tokens[], const char *delimiter)
 
 void fetch()
 {
-    int instruction = 0;
-    for (int i = 0; i < instruction_count; i++)
-    {
-        instruction = memory[pc];
-        decode(instruction);
-        pc++;
-    }
+    instruction = memory[pc];
+    pc++;
 }
 
 void decode(int instruction)
 {
     opcode = (instruction & 0b11110000000000000000000000000000) >> 28;
-    rs = (instruction & 0b00001111100000000000000000000000) >> 23;
-    rt = (instruction & 0b00000000011111000000000000000000) >> 18;
-    rd = (instruction & 0b00000000000000111110000000000000) >> 13;
+    R1 = (instruction & 0b00001111100000000000000000000000) >> 23;
+    R2 = (instruction & 0b00000000011111000000000000000000) >> 18;
+    R3 = (instruction & 0b00000000000000111110000000000000) >> 13;
     shamt = (instruction & 0b00000000000000000001111111111111);
     immediate = (instruction & 0b00000000000000111111111111111111);
     address = (instruction & 0b00001111111111111111111111111111);
@@ -212,30 +210,75 @@ void decode(int instruction)
         immediate = immediate + 0b11111111111111000000000000000000;
     }
 
-    printf("Instruction %i\n", pc);
-    printf("opcode = %i\n", opcode);
-    printf("rs = %i\n", rs);
-    printf("rt = %i\n", rt);
-    printf("rd = %i\n", rd);
-    printf("shift amount = %i\n", shamt);
-    printf("immediate = %i\n", immediate);
-    printf("address = %i\n", address);
-    printf("---------- \n");
+    // printf("Instruction %i\n", pc);
+    // printf("opcode = %i\n", opcode);
+    // printf("R1 = %i\n", R1);
+    // printf("R2 = %i\n", R2);
+    // printf("R3 = %i\n", R3);
+    // printf("shift amount = %i\n", shamt);
+    // printf("immediate = %i\n", immediate);
+    // printf("address = %i\n", address);
+    // printf("---------- \n");
 }
 
 void execute()
 {
-    // Execute instruction
+    switch (opcode)
+    {
+    case 0:
+        ALU_result = registers[R2] + registers[R3];
+        break;
+    case 1:
+        ALU_result = registers[R2] - registers[R3];
+        break;
+    case 2:
+        ALU_result = registers[R2] * registers[R3];
+        break;
+    case 3:
+        ALU_result = immediate;
+        break;
+    case 4:
+        if (registers[R1] == registers[R2])
+        {
+            pc += immediate;
+        }
+        break;
+    case 5:
+        ALU_result = registers[R2] & registers[R3];
+        break;
+    case 6:
+        ALU_result = registers[R2] ^ immediate;
+        break;
+    case 7:
+        pc = (pc & 0xF0000000) | address;
+        break;
+    case 8:
+        ALU_result = registers[R2] << shamt;
+        break;
+    case 9:
+        ALU_result = registers[R2] >> shamt;
+        break;
+    }
 }
 
 void memory_access()
 {
-    // Access memory
+    if (opcode == 10)
+    {
+        registers[R1] = memory[registers[R2] + immediate];
+    }
+    else if (opcode == 11)
+    {
+        memory[registers[R2] + immediate] = registers[R1];
+    }
 }
 
 void write_back()
 {
-    // Write back to registers
+    if (opcode == 0 || opcode == 1 || opcode == 2 || opcode == 3 || opcode == 5 || opcode == 6 || opcode == 8 || opcode == 9)
+    {
+        registers[R1] = ALU_result;
+    }
 }
 
 int main()
@@ -258,11 +301,8 @@ int main()
     fclose(file);
 
     // MISSING IMPLEMENTATION
-    //  ability to deal with Registers with numbers > 10 in parsing instructions and handle negative immediate values
-    //  execute();
-    //  memory_access();
-    //  write_back();
     //  Pipleline stages
+    //  Clock Cycles
     //  Printings
 
     return 0;
