@@ -10,17 +10,12 @@
 
 // Memory and registers
 int memory[MEMORY_SIZE];
-int registers[NUM_REGISTERS] = {0,  1,  2,  3,  4,  5,  6,  7,  8,  9,  10,
+int registers[NUM_REGISTERS] = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10,
                                 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21,
                                 22, 23, 24, 25, 26, 27, 28, 29, 30, 31};
-int valueR1 = 0;
-int valueR2 = 0;
-int valueR3 = 0;
-int ALU_result_memory_location = 0;
-int IF_ID_pipeline_register = 0;
+
 int instruction_count = 0;
-int clock_cycle = 0;
-int instruction = 0;
+int clock_cycle = 1;
 int pc = 0;
 
 // Function prototypes
@@ -31,133 +26,198 @@ void decode();
 void print_registers();
 
 // Instruction fields
-int opcode = 0; // (bits 31:28) ~~ Opcode value (0-11)
-int R1 =
-    0; // (bits 27:23) ~~ Source register 1 (for R-type and I-type instructions)
-int R2 =
-    0; // (bits 22:18) ~~ Source register 2 (for R-type and I-type instructions)
-int R3 = 0;    // (bits 17:13) ~~ Destination register (for R-type instructions)
-int shamt = 0; // (bits 12:0)  ~~ Shift amount (for R-type instructions)
-int immediate = 0; // (bits 17:0)  ~~ Immediate value (for I-type instructions)
-int address = 0;   // (bits 27:0)  ~~ Address (for J-type instructions)
+typedef struct
+{
+  int instruction;
+  int opcode;    // (bits 31:28) ~~ Opcode value (0-11)
+  int R1;        // (bits 27:23) ~~ Source register 1 (for R-type and I-type instructions)
+  int R2;        // (bits 22:18) ~~ Source register 2 (for R-type and I-type instructions)
+  int R3;        // (bits 17:13) ~~ Destination register (for R-type instructions)
+  int shamt;     // (bits 12:0)  ~~ Shift amount (for R-type instructions)
+  int immediate; // (bits 17:0)  ~~ Immediate value (for I-type instructions)
+  int address;   // (bits 27:0)  ~~ Address (for J-type instructions)
+  int pc;
+  int valueR1;
+  int valueR2;
+  int valueR3;
+  int ALU_result_memory_location;
+} instruction_t;
 
-void parse_instructions(FILE *assembly_file) {
+instruction_t pipeline[5];
+
+void pass_pipeline(instruction_t *from, instruction_t *to)
+{
+  to->instruction = from->instruction;
+  to->opcode = from->opcode;
+  to->R1 = from->R1;
+  to->R2 = from->R2;
+  to->R3 = from->R3;
+  to->shamt = from->shamt;
+  to->immediate = from->immediate;
+  to->address = from->address;
+  to->pc = from->pc;
+  to->valueR1 = from->valueR1;
+  to->valueR2 = from->valueR2;
+  to->valueR3 = from->valueR3;
+  to->ALU_result_memory_location = from->ALU_result_memory_location;
+}
+
+void parse_instructions(FILE *assembly_file)
+{
+  int opcode;
+  int R1;
+  int R2;
+  int R3;
+  int shamt;
+  int immediate;
+  int address;
 
   char line[100]; // Assuming each instruction fits on a single line under 100
                   // characters
 
-  while (fgets(line, sizeof(line), assembly_file) != NULL) {
+  while (fgets(line, sizeof(line), assembly_file) != NULL)
+  {
 
     // Tokenize the line (separate opcode, operands)
     char *tokens[4]; // Assuming maximum of 4 tokens (opcode, R3, R1,
                      // R2/immediate)
     int num_tokens = tokenize(line, tokens, " ");
 
-    if (num_tokens < 2) {
+    if (num_tokens < 2)
+    {
       // Handle error: Line with less than 2 tokens (opcode and operand)
       printf("Error: Invalid instruction format\n");
       break;
     }
 
     // Parse instruction based on opcode
-    if (strcmp(tokens[0], "ADD") == 0) {
+    if (strcmp(tokens[0], "ADD") == 0)
+    {
       // ADD instruction format: ADD R1,R2,R3
       // opcode for ADD is 0
       R1 = atoi(tokens[1] + 1) << 23;
       R2 = atoi(tokens[2] + 1) << 18;
       R3 = atoi(tokens[3] + 1) << 13;
       memory[instruction_count++] = opcode | R1 | R2 | R3;
-    } else if (strcmp(tokens[0], "SUB") == 0) {
+    }
+    else if (strcmp(tokens[0], "SUB") == 0)
+    {
       // SUB instruction format: SUB R1,R2,R3
       opcode = 1 << 28; // opcode for SUB is 1
       R1 = atoi(tokens[1] + 1) << 23;
       R2 = atoi(tokens[2] + 1) << 18;
       R3 = atoi(tokens[3] + 1) << 13;
       memory[instruction_count++] = opcode | R1 | R2 | R3;
-    } else if (strcmp(tokens[0], "MUL") == 0) {
+    }
+    else if (strcmp(tokens[0], "MUL") == 0)
+    {
       // MUL instruction format: MUL R3, R1, R2
       opcode = 2 << 28; // opcode for MUL is 2
       R1 = atoi(tokens[1] + 1) << 23;
       R2 = atoi(tokens[2] + 1) << 18;
       R3 = atoi(tokens[3] + 1) << 13;
       memory[instruction_count++] = opcode | R1 | R2 | R3;
-    } else if (strcmp(tokens[0], "MOVI") == 0) {
+    }
+    else if (strcmp(tokens[0], "MOVI") == 0)
+    {
       // MOVI instruction format: MOVI R3, immediate
       opcode = 3 << 28; // opcode for MOVI is 3
       R1 = atoi(tokens[1] + 1) << 23;
       immediate = atoi(tokens[2]);
       memory[instruction_count++] = opcode | R1 | ((immediate & 0x3FFFF));
-    } else if (strcmp(tokens[0], "JEQ") == 0) {
+    }
+    else if (strcmp(tokens[0], "JEQ") == 0)
+    {
       // JEQ instruction format: JEQ R1, R2, address
       opcode = 4 << 28; // opcode for JEQ is 4
       R1 = atoi(tokens[1] + 1) << 23;
       R2 = atoi(tokens[2] + 1) << 18;
       immediate = atoi(tokens[3]);
       memory[instruction_count++] = opcode | R1 | R2 | immediate;
-    } else if (strcmp(tokens[0], "AND") == 0) {
+    }
+    else if (strcmp(tokens[0], "AND") == 0)
+    {
       // AND instruction format: AND R3, R1, R2
       opcode = 5 << 28; // opcode for AND is 5
       R1 = atoi(tokens[1] + 1) << 23;
       R2 = atoi(tokens[2] + 1) << 18;
       R3 = atoi(tokens[3] + 1) << 13;
       memory[instruction_count++] = opcode | R1 | R2 | R3;
-    } else if (strcmp(tokens[0], "XORI") == 0) {
+    }
+    else if (strcmp(tokens[0], "XORI") == 0)
+    {
       // XORI instruction format: XORI R1, R2, immediate
       opcode = 6 << 28; // opcode for XORI is 6
       R1 = atoi(tokens[1] + 1) << 23;
       R2 = atoi(tokens[2] + 1) << 18;
       immediate = atoi(tokens[3]);
       memory[instruction_count++] = opcode | R1 | R2 | ((immediate & 0x3FFFF));
-    } else if (strcmp(tokens[0], "JMP") == 0) {
+    }
+    else if (strcmp(tokens[0], "JMP") == 0)
+    {
       // JMP instruction format: JMP address
       opcode = 7 << 28; // opcode for JMP is 7
       address = atoi(tokens[1]);
       memory[instruction_count++] = opcode | address;
-    } else if (strcmp(tokens[0], "LSL") == 0) {
+    }
+    else if (strcmp(tokens[0], "LSL") == 0)
+    {
       // LSL instruction format: LSL R1, R2, shamt
       opcode = 8 << 28; // opcode for LSL is 8
       R1 = atoi(tokens[1] + 1) << 23;
       R2 = atoi(tokens[2] + 1) << 18;
       shamt = atoi(tokens[3]);
       memory[instruction_count++] = opcode | R1 | R2 | shamt;
-    } else if (strcmp(tokens[0], "LSR") == 0) {
+    }
+    else if (strcmp(tokens[0], "LSR") == 0)
+    {
       // LSR instruction format: LSR R1, R2, shamt
       opcode = 9 << 28; // opcode for LSR is 9
       R1 = atoi(tokens[1] + 1) << 23;
       R2 = atoi(tokens[2] + 1) << 18;
       shamt = atoi(tokens[3]);
       memory[instruction_count++] = opcode | R1 | R2 | shamt;
-    } else if (strcmp(tokens[0], "MOVR") == 0) {
+    }
+    else if (strcmp(tokens[0], "MOVR") == 0)
+    {
       // MOVR instruction format: MOVR R1, R2, immediate
       opcode = 10 << 28; // opcode for MOVR is 10
       R1 = atoi(tokens[1] + 1) << 23;
       R2 = atoi(tokens[2] + 1) << 18;
       immediate = atoi(tokens[3]);
       memory[instruction_count++] = opcode | R1 | R2 | ((immediate & 0x3FFFF));
-    } else if (strcmp(tokens[0], "MOVM") == 0) {
+    }
+    else if (strcmp(tokens[0], "MOVM") == 0)
+    {
       // MOVM instruction format: MOVM R1, R2, immediate
       opcode = 11 << 28; // opcode for MOVM is 11
       R1 = atoi(tokens[1] + 1) << 23;
       R2 = atoi(tokens[2] + 1) << 18;
       immediate = atoi(tokens[3]);
       memory[instruction_count++] = opcode | R1 | R2 | ((immediate & 0x3FFFF));
-    } else {
+    }
+    else
+    {
       // Handle error: Invalid opcode
       printf("Error: Invalid opcode\n");
     }
   }
 }
 
-int tokenize(char *line, char *tokens[], const char *delimiter) {
-  if (line == NULL || tokens == NULL || delimiter == NULL) {
+int tokenize(char *line, char *tokens[], const char *delimiter)
+{
+  if (line == NULL || tokens == NULL || delimiter == NULL)
+  {
     printf("Error: NULL pointer passed to tokenize function.\n");
     exit(1);
   }
 
   int num_tokens = 0;
   char *token = strtok(line, delimiter);
-  while (token != NULL) {
-    if (num_tokens >= MAX_TOKENS) {
+  while (token != NULL)
+  {
+    if (num_tokens >= MAX_TOKENS)
+    {
       printf("Error: too many tokens. Increase MAX_TOKENS.\n");
       exit(1);
     }
@@ -168,104 +228,139 @@ int tokenize(char *line, char *tokens[], const char *delimiter) {
   return num_tokens;
 }
 
-void print_registers() {
+void print_registers()
+{
   printf("Registers:\n");
-  for (int i = 0; i < NUM_REGISTERS; i++) {
+  for (int i = 0; i < NUM_REGISTERS; i++)
+  {
     printf("R%d: %d\n", i, registers[i]);
   }
-  printf("---------------------\n\n");
 }
 
-void fetch() {
-  instruction = memory[pc];
-  // IF_ID_pipeline_register = pc++;
-  pc++;
-}
-
-void decode() {
-  opcode = (instruction >> 28) & 0xF;
-  R1 = (instruction >> 23) & 0x1F;
-  R2 = (instruction >> 18) & 0x1F;
-  R3 = (instruction >> 13) & 0x1F;
-  shamt = instruction & 0x1FFF;
-  immediate = instruction & 0x3FFFF;
-  address = instruction & 0xFFFFFFF;
-
-  if (immediate & (1 << 17)) // Check if the sign bit is set
+void print_memory()
+{
+  printf("Registers:\n");
+  for (int i = 0; i < MEMORY_SIZE; i++)
   {
-    immediate |= 0xFFFC0000; // Sign extend the immediate value
+    printf("position%d: %d, ", i, memory[i]);
+  }
+}
+
+void fetch()
+{
+  pipeline[0].instruction = memory[pc];
+  pipeline[0].pc = ++pc;
+  if (pc <= instruction_count)
+    printf("instruction %d has fetched\n", pipeline[0].pc);
+}
+
+void decode()
+{
+  pipeline[1].opcode = (pipeline[1].instruction >> 28) & 0xF;
+  pipeline[1].R1 = (pipeline[1].instruction >> 23) & 0x1F;
+  pipeline[1].R2 = (pipeline[1].instruction >> 18) & 0x1F;
+  pipeline[1].R3 = (pipeline[1].instruction >> 13) & 0x1F;
+  pipeline[1].shamt = pipeline[1].instruction & 0x1FFF;
+  pipeline[1].immediate = pipeline[1].instruction & 0x3FFFF;
+  pipeline[1].address = pipeline[1].instruction & 0xFFFFFFF;
+
+  if (pipeline[1].immediate & (1 << 17)) // Check if the sign bit is set
+  {
+    pipeline[1].immediate |= 0xFFFC0000; // Sign extend the immediate value
   }
 
-  valueR1 = registers[R1];
-  valueR2 = registers[R2];
-  valueR3 = registers[R3];
+  pipeline[1].valueR1 = registers[pipeline[1].R1];
+  pipeline[1].valueR2 = registers[pipeline[1].R2];
+  pipeline[1].valueR3 = registers[pipeline[1].R3];
+  printf("instruction %d has decoded\n", pipeline[1].pc);
 }
 
-void execute() {
-  switch (opcode) {
+void execute()
+{
+  switch (pipeline[2].opcode)
+  {
   case 0:
-    valueR1 = valueR2 + valueR3;
+    pipeline[2].valueR1 = pipeline[2].valueR2 + pipeline[2].valueR3;
     break;
   case 1:
-    valueR1 = valueR2 - valueR3;
+    pipeline[2].valueR1 = pipeline[2].valueR2 - pipeline[2].valueR3;
     break;
   case 2:
-    valueR1 = valueR2 * valueR3;
+    pipeline[2].valueR1 = pipeline[2].valueR2 * pipeline[2].valueR3;
     break;
   case 3:
-    valueR1 = immediate;
+    pipeline[2].valueR1 = pipeline[2].immediate;
     break;
   case 4:
-    if (registers[R1] == valueR2) {
-      pc += immediate;
+    if (registers[pipeline[2].R1] == pipeline[2].valueR2)
+    {
+      pc += pipeline[2].immediate;
     }
     break;
   case 5:
-    valueR1 = valueR2 & valueR3;
+    pipeline[2].valueR1 = pipeline[2].valueR2 & pipeline[2].valueR3;
     break;
   case 6:
-    valueR1 = valueR2 ^ immediate;
+    pipeline[2].valueR1 = pipeline[2].valueR2 ^ pipeline[2].immediate;
     break;
   case 7:
-    pc = (pc & 0xF0000000) | address;
+    pc = (pc & 0xF0000000) | pipeline[2].address;
     break;
   case 8:
-    valueR1 = valueR2 << shamt;
+    pipeline[2].valueR1 = pipeline[2].valueR2 << pipeline[2].shamt;
     break;
   case 9:
-    valueR1 = valueR2 >> shamt;
+    pipeline[2].valueR1 = pipeline[2].valueR2 >> pipeline[2].shamt;
     break;
   default:
-    ALU_result_memory_location = valueR2 + immediate;
+    pipeline[2].ALU_result_memory_location = pipeline[2].valueR2 + pipeline[2].immediate;
     break;
   }
+
+  printf("instruction %d has executed\n", pipeline[2].pc);
 }
 
-void memory_access() {
-  if (opcode == 10) {
-    valueR1 = memory[ALU_result_memory_location];
-  } else if (opcode == 11) {
-    memory[ALU_result_memory_location] = valueR1;
+void memory_access()
+{
+  if (pipeline[3].opcode == 10)
+  {
+    pipeline[3].valueR1 = memory[pipeline[3].ALU_result_memory_location];
   }
+  else if (pipeline[3].opcode == 11)
+  {
+    memory[pipeline[3].ALU_result_memory_location] = pipeline[3].valueR1;
+    printf("Memory position %d changed with: %d\n", pipeline[3].ALU_result_memory_location, pipeline[3].valueR1);
+  }
+
+  printf("instruction %d has accessed memory\n", pipeline[3].pc);
 }
 
-void write_back() {
+void write_back()
+{
   int valid_opcodes[12] = {1, 1, 1, 1, 0, 1, 1, 0, 1, 1, 1, 0};
 
-  if (valid_opcodes[opcode]) {
-    if (R1 == 0) {
-      valueR1 = 0;
-      registers[R1] = 0;
-    } else {
-      registers[R1] = valueR1;
+  if (valid_opcodes[pipeline[4].opcode])
+  {
+    if (pipeline[4].R1 == 0)
+    {
+      pipeline[4].valueR1 = 0;
+      registers[pipeline[4].R1] = 0;
+    }
+    else
+    {
+      registers[pipeline[4].R1] = pipeline[4].valueR1;
     }
   }
+
+  printf("instruction %d has wrote back\n", pipeline[4].pc);
 }
 
-int main() {
+int main()
+{
   // Open the assembly file
   FILE *file = fopen("assembly.txt", "r");
-  if (file == NULL) {
+  if (file == NULL)
+  {
     printf("Error: Could not open file\n");
     return -1;
   }
@@ -276,29 +371,58 @@ int main() {
   fclose(file);
 
   printf("Instruction count:%d\n", instruction_count);
-  while (1) {
-    if (clock_cycle % 7 == 0) {
-      printf("PC: %d\n", pc);
-      fetch();
-    } else if (clock_cycle % 7 == 1 || clock_cycle % 7 == 2) {
-      decode();
-    } else if (clock_cycle % 5 == 3 || clock_cycle % 5 == 4) {
-      execute();
-    } else if (clock_cycle % 5 == 5) {
-      memory_access();
-    } else if (clock_cycle % 5 == 6) {
-      write_back();
-      print_registers();
-    }
-    clock_cycle++;
-    if (pc >= instruction_count) {
+  print_registers();
+
+  while (1)
+  {
+    pass_pipeline(&pipeline[3], &pipeline[4]); // memory - write back
+    if (pipeline[4].pc > instruction_count)
+    {
       break;
     }
+
+    printf("Clock cycle: %d\n", clock_cycle);
+    pass_pipeline(&pipeline[2], &pipeline[3]); // execute - memory
+
+    if (clock_cycle % 2 == 0)
+      pass_pipeline(&pipeline[1], &pipeline[2]); // decode - execute
+
+    if (clock_cycle % 2 == 0)
+      pass_pipeline(&pipeline[0], &pipeline[1]); // fetch - decode
+
+    printf("pipeline 0 %d\n", pipeline[0].pc);
+    printf("pipeline 1 %d\n", pipeline[1].pc);
+    printf("pipeline 2 %d\n", pipeline[2].pc);
+    printf("pipeline 3 %d\n", pipeline[3].pc);
+
+    if (clock_cycle % 2 == 1 && pc <= instruction_count)
+    {
+      fetch();
+    }
+    if (clock_cycle > 2 && clock_cycle % 2 == 1 && pipeline[1].pc <= instruction_count)
+    {
+      decode();
+    }
+    if (clock_cycle > 4 && clock_cycle % 2 == 1 && pipeline[2].pc <= instruction_count)
+    {
+      execute();
+    }
+    if (clock_cycle >= 6 && clock_cycle % 2 == 0 && pipeline[3].pc <= instruction_count)
+    {
+      memory_access();
+    }
+    if (clock_cycle >= 7 && clock_cycle % 2 == 1 && pipeline[4].pc <= instruction_count)
+    {
+      write_back();
+    }
+
+    clock_cycle++;
   }
 
   printf("Final registers:\n");
   print_registers();
-  printf("%d\n", clock_cycle);
+  printf("Final memory:\n");
+  print_memory();
 
   // MISSING IMPLEMENTATION
   //  Pipleline stages
