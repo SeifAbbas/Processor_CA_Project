@@ -10,9 +10,15 @@
 
 // Memory and registers
 int memory[MEMORY_SIZE];
-int registers[NUM_REGISTERS];
-int ALU_result = 0;
+int registers[NUM_REGISTERS] = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31};
+int valueR1 = 0;
+int valueR2 = 0;
+int valueR3 = 0;
+int ALU_result_memory_location = 0;
+int IF_ID_pipeline_register = 0;
 int instruction_count = 0;
+int total_cycles = 0;
+int clock_cycle = 1;
 int instruction = 0;
 int pc = 0;
 
@@ -191,34 +197,42 @@ int tokenize(char *line, char *tokens[], const char *delimiter)
 void fetch()
 {
     instruction = memory[pc];
-    pc++;
+    IF_ID_pipeline_register = pc++;
+    decode(instruction);
 }
 
 void decode(int instruction)
 {
-    opcode = (instruction & 0b11110000000000000000000000000000) >> 28;
-    R1 = (instruction & 0b00001111100000000000000000000000) >> 23;
-    R2 = (instruction & 0b00000000011111000000000000000000) >> 18;
-    R3 = (instruction & 0b00000000000000111110000000000000) >> 13;
-    shamt = (instruction & 0b00000000000000000001111111111111);
-    immediate = (instruction & 0b00000000000000111111111111111111);
-    address = (instruction & 0b00001111111111111111111111111111);
+    opcode = (instruction >> 28) & 0xF;
+    R1 = (instruction >> 23) & 0x1F;
+    R2 = (instruction >> 18) & 0x1F;
+    R3 = (instruction >> 13) & 0x1F;
+    shamt = instruction & 0x1FFF;
+    immediate = instruction & 0x3FFFF;
+    address = instruction & 0xFFFFFFF;
 
-    int sign_bit = immediate >> 17;
-    if (sign_bit == 1)
+    if (immediate & (1 << 17)) // Check if the sign bit is set
     {
-        immediate = immediate + 0b11111111111111000000000000000000;
+        immediate |= 0xFFFC0000; // Sign extend the immediate value
     }
 
-    // printf("Instruction %i\n", pc);
-    // printf("opcode = %i\n", opcode);
-    // printf("R1 = %i\n", R1);
-    // printf("R2 = %i\n", R2);
-    // printf("R3 = %i\n", R3);
-    // printf("shift amount = %i\n", shamt);
-    // printf("immediate = %i\n", immediate);
-    // printf("address = %i\n", address);
-    // printf("---------- \n");
+    valueR1 = registers[R1];
+    valueR2 = registers[R2];
+    valueR3 = registers[R3];
+
+    printf("Instruction %i\n", pc);
+    printf("opcode = %i\n", opcode);
+    printf("R1 = %i\n", R1);
+    printf("R2 = %i\n", R2);
+    printf("R3 = %i\n", R3);
+    printf("shift amount = %i\n", shamt);
+    printf("immediate = %i\n", immediate);
+    printf("address = %i\n", address);
+    printf("valueR1 = %i\n", valueR1);
+    printf("valueR2 = %i\n", valueR2);
+    printf("valueR3 = %i\n", valueR3);
+    printf("Instruction count: %d\n", instruction_count);
+    printf("---------- \n");
 }
 
 void execute()
@@ -226,37 +240,40 @@ void execute()
     switch (opcode)
     {
     case 0:
-        ALU_result = registers[R2] + registers[R3];
+        valueR1 = valueR2 + valueR3;
         break;
     case 1:
-        ALU_result = registers[R2] - registers[R3];
+        valueR1 = valueR2 - valueR3;
         break;
     case 2:
-        ALU_result = registers[R2] * registers[R3];
+        valueR1 = valueR2 * valueR3;
         break;
     case 3:
-        ALU_result = immediate;
+        valueR1 = immediate;
         break;
     case 4:
-        if (registers[R1] == registers[R2])
+        if (registers[R1] == valueR2)
         {
             pc += immediate;
         }
         break;
     case 5:
-        ALU_result = registers[R2] & registers[R3];
+        valueR1 = valueR2 & valueR3;
         break;
     case 6:
-        ALU_result = registers[R2] ^ immediate;
+        valueR1 = valueR2 ^ immediate;
         break;
     case 7:
         pc = (pc & 0xF0000000) | address;
         break;
     case 8:
-        ALU_result = registers[R2] << shamt;
+        valueR1 = valueR2 << shamt;
         break;
     case 9:
-        ALU_result = registers[R2] >> shamt;
+        valueR1 = valueR2 >> shamt;
+        break;
+    default:
+        ALU_result_memory_location = valueR2 + immediate;
         break;
     }
 }
@@ -265,19 +282,29 @@ void memory_access()
 {
     if (opcode == 10)
     {
-        registers[R1] = memory[registers[R2] + immediate];
+        valueR1 = memory[ALU_result_memory_location];
     }
     else if (opcode == 11)
     {
-        memory[registers[R2] + immediate] = registers[R1];
+        memory[ALU_result_memory_location] = valueR1;
     }
 }
 
 void write_back()
 {
-    if (opcode == 0 || opcode == 1 || opcode == 2 || opcode == 3 || opcode == 5 || opcode == 6 || opcode == 8 || opcode == 9)
+    int valid_opcodes[12] = {1, 1, 1, 1, 0, 1, 1, 0, 1, 1, 1, 0};
+
+    if (valid_opcodes[opcode])
     {
-        registers[R1] = ALU_result;
+        if (R1 == 0)
+        {
+            valueR1 = 0;
+            registers[R1] = 0;
+        }
+        else
+        {
+            registers[R1] = valueR1;
+        }
     }
 }
 
@@ -293,9 +320,6 @@ int main()
 
     parse_instructions(file);
     fetch();
-
-    // printf("%d\n", memory[0]);
-    // printf("%d\n", memory[1]);
 
     // Close the file
     fclose(file);
