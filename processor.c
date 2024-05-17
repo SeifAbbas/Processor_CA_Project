@@ -10,9 +10,7 @@
 
 // Memory and registers
 int memory[MEMORY_SIZE];
-int registers[NUM_REGISTERS] = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10,
-                                11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21,
-                                22, 23, 24, 25, 26, 27, 28, 29, 30, 31};
+int registers[NUM_REGISTERS] = {0};
 
 int instruction_count = 0;
 int clock_cycle = 1;
@@ -31,10 +29,8 @@ typedef struct
     int flush_flag;
     int instruction;
     int opcode;    // (bits 31:28) ~~ Opcode value (0-11)
-    int R1;        // (bits 27:23) ~~ Source register 1 (for R-type and I-type
-                   // instructions)
-    int R2;        // (bits 22:18) ~~ Source register 2 (for R-type and I-type
-                   // instructions)
+    int R1;        // (bits 27:23) ~~ Source register 1 (for R-type and I-type instructions)
+    int R2;        // (bits 22:18) ~~ Source register 2 (for R-type and I-type instructions)
     int R3;        // (bits 17:13) ~~ Destination register (for R-type instructions)
     int shamt;     // (bits 12:0)  ~~ Shift amount (for R-type instructions)
     int immediate; // (bits 17:0)  ~~ Immediate value (for I-type instructions)
@@ -233,6 +229,7 @@ int tokenize(char *line, char *tokens[], const char *delimiter)
     return num_tokens;
 }
 
+// Print the register contents
 void print_registers()
 {
     printf("Registers:\n");
@@ -241,28 +238,11 @@ void print_registers()
         printf("R%d: %d\n", i, registers[i]);
     }
 }
-
-void flush(instruction_t *instruction)
-{
-    instruction->instruction = 0;
-    instruction->opcode = 0;
-    instruction->R1 = 0;
-    instruction->R2 = 0;
-    instruction->R3 = 0;
-    instruction->shamt = 0;
-    instruction->immediate = 0;
-    instruction->address = 0;
-    instruction->valueR1 = 0;
-    instruction->valueR2 = 0;
-    instruction->valueR3 = 0;
-    instruction->ALU_result_memory_location = 0;
-    instruction->pc = 0;
-}
-
+// Print the memory contents
 void print_memory()
 {
     printf("Registers:\n");
-    for (int i = 0; i < 22; i++)
+    for (int i = 0; i < MEMORY_SIZE; i++)
     {
         printf("position%d: %d, ", i, memory[i]);
     }
@@ -346,9 +326,18 @@ void execute()
         pipeline[2].valueR1 = pipeline[2].valueR2 ^ pipeline[2].immediate;
         break;
     case 7:
-        pipeline[0].flush_flag = 1;
-        pipeline[1].flush_flag = 1;
-        pc = (pc & 0xF0000000) | pipeline[2].address;
+        // Treating JMP to the next pc address immediately and any other cases than the two correct ones below as useless...
+
+        if (pipeline[2].address == pipeline[2].pc + 1)
+        {
+            pipeline[1].flush_flag = 1;
+        }
+        else if (pipeline[2].address != pipeline[2].pc)
+        {
+            pipeline[0].flush_flag = 1;
+            pipeline[1].flush_flag = 1;
+            pc = (pc & 0xF0000000) | pipeline[2].address;
+        }
         break;
     case 8:
         pipeline[2].valueR1 = pipeline[2].valueR2 << pipeline[2].shamt;
